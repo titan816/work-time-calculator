@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>下班時間計算機</title>
+    <style>
+        :root {
+            --primary-color: #4A90E2;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --accent-color: #FF5A5F;
+            --success-color: #2ECC71;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        input[type="time"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.2rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+
+        input[type="time"]:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #357ABD;
+        }
+
+        #result {
+            margin-top: 2rem;
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .result-card {
+            background: #fafafa;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 5px solid var(--success-color);
+            margin-bottom: 1rem;
+            text-align: left;
+        }
+
+        .result-title {
+            font-size: 0.85rem;
+            color: #777;
+            margin-bottom: 0.3rem;
+        }
+
+        .result-time {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .warning {
+            font-size: 0.8rem;
+            color: var(--accent-color);
+            margin-top: 0.5rem;
+        }
+
+        .limit-info {
+            font-size: 0.9rem;
+            color: #555;
+            margin-top: 1rem;
+            padding: 10px;
+            border: 1px dashed #ccc;
+            border-radius: 5px;
+        }
+
+        .highlight-red {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🕒 下班時間計算</h1>
+    
+    <div class="input-group">
+        <label for="startTime">請輸入上班打卡時間：</label>
+        <input type="time" id="startTime" required>
+    </div>
+
+    <button onclick="calculateTime()">計算下班時間</button>
+
+    <div id="result">
+        <div class="result-card">
+            <div class="result-title">最早可下班時間</div>
+            <div class="result-time" id="endTime">--:--</div>
+            <div id="adjustmentNote" class="warning"></div>
+        </div>
+
+        <div class="limit-info">
+            打卡緩衝區間：<br>
+            <span id="bufferRange">--:-- ~ --:--</span><br>
+            <span class="warning">超過 <span id="limitTime" class="highlight-red">--:--</span> 會被註記！</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 預設填入當前時間，方便測試
+    document.addEventListener('DOMContentLoaded', () => {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        document.getElementById('startTime').value = `${hours}:${minutes}`;
+    });
+
+    function calculateTime() {
+        const input = document.getElementById('startTime').value;
+        if (!input) {
+            alert("請輸入時間");
+            return;
+        }
+
+        const [h, m] = input.split(':').map(Number);
+        let workStart = new Date();
+        workStart.setHours(h, m, 0);
+
+        // 邏輯設定
+        // 1. 彈性時間判斷 (07:30 - 08:30)
+        // 若早於 07:30，通常不算工時，以 07:30 起算，避免早退。
+        let effectiveStart = new Date(workStart);
+        let noteText = "";
+        
+        const flexStart = new Date();
+        flexStart.setHours(7, 30, 0);
+        
+        const flexEnd = new Date();
+        flexEnd.setHours(8, 30, 0);
+
+        if (workStart < flexStart) {
+            effectiveStart = flexStart;
+            noteText = "⚠️ 您早於 07:30 打卡，依規定以 07:30 起算工時。";
+        } else if (workStart > flexEnd) {
+            noteText = "⚠️ 您已晚於 08:30 打卡，請留意考勤異常。";
+        }
+
+        // 2. 計算下班時間 (工時 9小時 30分鐘 = 08:00 -> 17:30)
+        // 公式：有效上班時間 + 9小時 + 30分鐘
+        let endTime = new Date(effectiveStart);
+        endTime.setHours(effectiveStart.getHours() + 9);
+        endTime.setMinutes(effectiveStart.getMinutes() + 30);
+
+        // 3. 計算最晚緩衝時間 (下班時間 + 15分鐘)
+        let limitTime = new Date(endTime);
+        limitTime.setMinutes(endTime.getMinutes() + 15);
+
+        // 4. 顯示結果
+        const formatTime = (date) => {
+            return String(date.getHours()).padStart(2, '0') + ':' + 
+                   String(date.getMinutes()).padStart(2, '0');
+        };
+
+        document.getElementById('endTime').textContent = formatTime(endTime);
+        document.getElementById('adjustmentNote').textContent = noteText;
+        document.getElementById('limitTime').textContent = formatTime(limitTime);
+        document.getElementById('bufferRange').textContent = `${formatTime(endTime)} ~ ${formatTime(limitTime)}`;
+        
+        document.getElementById('result').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
