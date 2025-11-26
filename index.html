@@ -12,6 +12,8 @@
             --text-color: #333;
             --accent-color: #FF5A5F;
             --success-color: #2ECC71;
+            --secondary-btn-bg: #e0e0e0;
+            --secondary-btn-text: #333;
         }
 
         body {
@@ -43,7 +45,7 @@
         }
 
         .input-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
             text-align: left;
         }
 
@@ -55,22 +57,24 @@
             color: #666;
         }
 
-        input[type="time"] {
+        input[type="time"], select {
             width: 100%;
             padding: 12px;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             box-sizing: border-box;
             transition: border-color 0.3s;
+            background-color: #fff;
         }
 
-        input[type="time"]:focus {
+        input[type="time"]:focus, select:focus {
             border-color: var(--primary-color);
             outline: none;
         }
 
-        button {
+        /* 按鈕樣式 */
+        .btn-main {
             width: 100%;
             padding: 12px;
             background-color: var(--primary-color);
@@ -81,10 +85,38 @@
             cursor: pointer;
             font-weight: bold;
             transition: background-color 0.2s;
+            margin-top: 10px;
         }
 
-        button:hover {
+        .btn-main:hover {
             background-color: #357ABD;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 1.5rem;
+        }
+
+        .btn-secondary {
+            flex: 1;
+            padding: 10px;
+            background-color: var(--secondary-btn-bg);
+            color: var(--secondary-btn-text);
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background-color: #d0d0d0;
         }
 
         #result {
@@ -145,12 +177,22 @@
 <div class="container">
     <h1>🕒 下班時間計算</h1>
     
-    <div class="input-group">
-        <label for="startTime">請輸入上班打卡時間：</label>
-        <input type="time" id="startTime" required>
-    </div>
+    <div id="calculatorForm">
+        <div class="input-group">
+            <label for="startTime">上班打卡時間：</label>
+            <input type="time" id="startTime" required>
+        </div>
 
-    <button onclick="calculateTime()">計算下班時間</button>
+        <div class="input-group">
+            <label for="flexOption">彈性時間範圍：</label>
+            <select id="flexOption">
+                <option value="30" selected>30 分鐘 (07:30 - 08:30)</option>
+                <option value="15">15 分鐘 (07:45 - 08:15)</option>
+            </select>
+        </div>
+
+        <button class="btn-main" onclick="calculateTime()">計算下班時間</button>
+    </div>
 
     <div id="result">
         <div class="result-card">
@@ -163,6 +205,11 @@
             打卡緩衝區間：<br>
             <span id="bufferRange">--:-- ~ --:--</span><br>
             <span class="warning">超過 <span id="limitTime" class="highlight-red">--:--</span> 會被註記！</span>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-secondary" onclick="resetCalculator()">🔄 再算一次</button>
+            <a href="https://titan816.github.io" class="btn-secondary">🏠 回到首頁</a>
         </div>
     </div>
 </div>
@@ -178,6 +225,8 @@
 
     function calculateTime() {
         const input = document.getElementById('startTime').value;
+        const flexMinutes = parseInt(document.getElementById('flexOption').value);
+
         if (!input) {
             alert("請輸入時間");
             return;
@@ -187,47 +236,58 @@
         let workStart = new Date();
         workStart.setHours(h, m, 0);
 
-        // 邏輯設定
-        // 1. 彈性時間判斷 (07:30 - 08:30)
-        // 若早於 07:30，通常不算工時，以 07:30 起算，避免早退。
-        let effectiveStart = new Date(workStart);
-        let noteText = "";
-        
+        // 動態計算彈性時間的邊界
+        // 基準上班時間 08:00
         const flexStart = new Date();
-        flexStart.setHours(7, 30, 0);
-        
+        flexStart.setHours(8, 0 - flexMinutes, 0); // 08:00 減去彈性分鐘
+
         const flexEnd = new Date();
-        flexEnd.setHours(8, 30, 0);
+        flexEnd.setHours(8, 0 + flexMinutes, 0); // 08:00 加上彈性分鐘
 
-        if (workStart < flexStart) {
-            effectiveStart = flexStart;
-            noteText = "⚠️ 您早於 07:30 打卡，依規定以 07:30 起算工時。";
-        } else if (workStart > flexEnd) {
-            noteText = "⚠️ 您已晚於 08:30 打卡，請留意考勤異常。";
-        }
-
-        // 2. 計算下班時間 (工時 9小時 30分鐘 = 08:00 -> 17:30)
-        // 公式：有效上班時間 + 9小時 + 30分鐘
-        let endTime = new Date(effectiveStart);
-        endTime.setHours(effectiveStart.getHours() + 9);
-        endTime.setMinutes(effectiveStart.getMinutes() + 30);
-
-        // 3. 計算最晚緩衝時間 (下班時間 + 15分鐘)
-        let limitTime = new Date(endTime);
-        limitTime.setMinutes(endTime.getMinutes() + 15);
-
-        // 4. 顯示結果
+        // 格式化時間文字供顯示用
         const formatTime = (date) => {
             return String(date.getHours()).padStart(2, '0') + ':' + 
                    String(date.getMinutes()).padStart(2, '0');
         };
 
+        let effectiveStart = new Date(workStart);
+        let noteText = "";
+
+        if (workStart < flexStart) {
+            effectiveStart = flexStart;
+            noteText = `⚠️ 您早於 ${formatTime(flexStart)} 打卡，依規定以 ${formatTime(flexStart)} 起算工時。`;
+        } else if (workStart > flexEnd) {
+            noteText = `⚠️ 您已晚於 ${formatTime(flexEnd)} 打卡，請留意考勤異常。`;
+        }
+
+        // 計算下班時間 (工時 9小時 30分鐘 = 08:00 -> 17:30)
+        let endTime = new Date(effectiveStart);
+        endTime.setHours(effectiveStart.getHours() + 9);
+        endTime.setMinutes(effectiveStart.getMinutes() + 30);
+
+        // 計算最晚緩衝時間 (下班時間 + 15分鐘)
+        let limitTime = new Date(endTime);
+        limitTime.setMinutes(endTime.getMinutes() + 15);
+
+        // 顯示結果
         document.getElementById('endTime').textContent = formatTime(endTime);
         document.getElementById('adjustmentNote').textContent = noteText;
         document.getElementById('limitTime').textContent = formatTime(limitTime);
         document.getElementById('bufferRange').textContent = `${formatTime(endTime)} ~ ${formatTime(limitTime)}`;
         
+        // 切換顯示區塊
+        document.getElementById('calculatorForm').style.display = 'none';
         document.getElementById('result').style.display = 'block';
+    }
+
+    function resetCalculator() {
+        // 重置欄位與顯示
+        document.getElementById('result').style.display = 'none';
+        document.getElementById('calculatorForm').style.display = 'block';
+        document.getElementById('adjustmentNote').textContent = "";
+        
+        // 重新聚焦在時間輸入框（不清除時間，方便微調，若要清除可加一行）
+        // document.getElementById('startTime').value = ""; 
     }
 </script>
 
